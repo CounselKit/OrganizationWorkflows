@@ -88,7 +88,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           cd AwsTools/build-images
-          ./bin/create_dockerfile_php.py -r $REPO -s ${{ inputs.service }} -t ${{ secrets.GH_ACCESS_TOKEN }}
+          ./bin/create_dockerfile_php.py -r ${{ inputs.repo }} -s ${{ inputs.service }} -t ${{ secrets.GH_ACCESS_TOKEN }}
           docker build \
             --build-arg app_branch=${{ inputs.tag }} \
             --build-arg author="GitHub" \
