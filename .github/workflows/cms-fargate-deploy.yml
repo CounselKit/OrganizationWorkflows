@@ -1,0 +1,145 @@
+name: Deploy to Amazon ECS Fargate
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      ecr_repository:
+        required: true
+        type: string
+      ecs_service:
+        required: true
+        type: string
+      ecs_cluster:
+        required: true
+        type: string
+      ecs_task_definition:
+        required: true
+        type: string
+      nginx_tag:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+    secrets:
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      GH_ACCESS_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ECS Fargate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Clone AwsTools repository
+        uses: actions/checkout@v3
+        with:
+          repository: CounselKit/AwsTools
+          path: AwsTools
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Retrieve the task definition id
+        id: retrieve-task-definition-id
+        run: |
+          echo "::set-output name=id::$(aws ecs describe-services --cluster ${{ inputs.ecs_cluster }} --service ${{ inputs.ecs_service }} --query "services[].taskDefinition" | jq -r ".[0]" | sed -e 's|arn:aws:ecs:.*:task-definition\/||g')"
+
+      - name: Build and push the drupal image to Amazon ECR
+        id: build-image-drupal
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd AwsTools/${{ inputs.environment }}/cms/build-images/php-nginx
+          ./bin/create_dockerfile_php.py
+          docker build \
+            --build-arg app_branch=${{ inputs.tag }} \
+            --build-arg author="GitHub" \
+            --tag $ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }} .
+          docker push $ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }}
+          echo "::set-output name=image::$ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }}"
+
+      - name: Build and push the nginx image to Amazon ECR
+        id: build-image-nginx
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd AwsTools/${{ inputs.environment }}/cms/build-images/php-nginx
+          ./bin/create_dockerfile_nginx.py -i $ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }}
+          docker build \
+            --build-arg app_branch=${{ inputs.tag }} \
+            --build-arg author="GitHub" \
+            --build-arg build=${{ inputs.nginx_tag }} \
+            --tag $ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }}-nginx .
+          docker push $ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }}-nginx
+          echo "::set-output name=image::$ECR_REGISTRY/${{ inputs.ecr_repository }}:${{ inputs.tag }}-nginx"
+
+      - name: Retrieve the task definition
+        id: retrieve-task-definition
+        env:
+          ECS_TASK_DEFINITION_ID: ${{ steps.retrieve-task-definition-id.outputs.id }}
+        run: |
+          aws ecs describe-task-definition --task-definition $ECS_TASK_DEFINITION_ID > ${{ inputs.ecs_task_definition }}
+
+      - name: Massage task definition
+        id: massage-task-definition
+        run: |
+          cp AwsTools/scripts/massage_task_definition.py massage_task_definition.py
+          python3 massage_task_definition.py ${{ inputs.ecs_task_definition }}
+
+      - name: Fill in the new drupal image ID in the Amazon ECS task definition
+        id: task-def-drupal
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ inputs.ecs_task_definition }}
+          container-name: drupal
+          image: ${{ steps.build-image-drupal.outputs.image }}
+
+      - name: Fill in the new drush image ID in the Amazon ECS task definition
+        id: task-def-drush
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-drupal.outputs.task-definition }}
+          container-name: drush
+          image: ${{ steps.build-image-drupal.outputs.image }}
+
+      - name: Fill in the new nginx image ID in the Amazon ECS task definition
+        id: task-def-nginx
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-drush.outputs.task-definition }}
+          container-name: nginx
+          image: ${{ steps.build-image-nginx.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-nginx.outputs.task-definition }}
+          service: ${{ inputs.ecs_service }}
+          cluster: ${{ inputs.ecs_cluster }}
+          wait-for-service-stability: true
