@@ -57,8 +57,8 @@ jobs:
           docker build \
             --build-arg app_branch=${{ inputs.tag }} \
             --build-arg author="GitHub" \
-            --tag $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }} .
-          docker push $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}
+            --tag $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }} .
+          docker push $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}
 
       - name: Build and push the nginx image to Amazon ECR
         id: build-image-nginx
@@ -66,10 +66,10 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           cd AwsTools/ck/cms/build-images/php-nginx
-          ./bin/create_dockerfile_nginx.py -i $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}
+          ./bin/create_dockerfile_nginx.py -i $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}
           docker build \
             --build-arg app_branch=${{ inputs.tag }} \
             --build-arg author="GitHub" \
             --build-arg build=${{ inputs.nginx_tag }} \
-            --tag $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}-nginx .
-          docker push $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}-nginx
+            --tag $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}-nginx .
+          docker push $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}-nginx
