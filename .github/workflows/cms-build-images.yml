@@ -1,0 +1,75 @@
+name: Build CMS Images
+
+on:
+  workflow_call:
+    inputs:
+      nginx_tag:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+    secrets:
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      GH_ACCESS_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ECS Fargate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Clone AwsTools repository
+        uses: actions/checkout@v3
+        with:
+          repository: CounselKit/AwsTools
+          path: AwsTools
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and push the drupal image to Amazon ECR
+        id: build-image-drupal
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd AwsTools/ck/cms/build-images/php-nginx
+          ./bin/create_dockerfile_php.py
+          docker build \
+            --build-arg app_branch=${{ inputs.tag }} \
+            --build-arg author="GitHub" \
+            --tag $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }} .
+          docker push $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}
+
+      - name: Build and push the nginx image to Amazon ECR
+        id: build-image-nginx
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd AwsTools/ck/cms/build-images/php-nginx
+          ./bin/create_dockerfile_nginx.py -i $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}
+          docker build \
+            --build-arg app_branch=${{ inputs.tag }} \
+            --build-arg author="GitHub" \
+            --build-arg build=${{ inputs.nginx_tag }} \
+            --tag $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}-nginx .
+          docker push $ECR_REGISTRY/com-ck-cms-default:${{ inputs.tag }}-nginx
