@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to ECS Fargate
+    name: Build Image
     runs-on: ubuntu-latest
     environment: production
     steps:
