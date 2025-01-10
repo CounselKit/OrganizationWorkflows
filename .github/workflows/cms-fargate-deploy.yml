@@ -96,7 +96,7 @@ jobs:
           image: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}-nginx
 
       - name: Deploy Amazon ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task-def-nginx.outputs.task-definition }}
           service: ${{ inputs.ecs_service }}
