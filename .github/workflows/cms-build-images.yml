@@ -9,6 +9,10 @@ on:
       tag:
         required: true
         type: string
+      php_tag:
+        required: false
+        type: string
+        default: "7.4"
     secrets:
       AWS_SECRET_ACCESS_KEY:
         required: true
@@ -53,12 +57,12 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           cd AwsTools/ck/cms/build-images/php-nginx
-          ./bin/create_dockerfile_php.py
+          ./bin/create_dockerfile_php.py -p ${{ inputs.php_tag }}
           docker build \
             --build-arg app_branch=${{ inputs.tag }} \
             --build-arg author="GitHub" \
-            --tag $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }} .
-          docker push $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}
+            --tag $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}:php-${{ inputs.php_tag }} .
+          docker push $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}:php-${{ inputs.php_tag }}  
 
       - name: Build and push the nginx image to Amazon ECR
         id: build-image-nginx
