@@ -61,8 +61,8 @@ jobs:
           docker build \
             --build-arg app_branch=${{ inputs.tag }} \
             --build-arg author="GitHub" \
-            --tag $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}:php-${{ inputs.php_tag }} .
-          docker push $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}:php-${{ inputs.php_tag }}  
+            --tag $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}--php-${{ inputs.php_tag }} .
+          docker push $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}--php-${{ inputs.php_tag }}  
 
       - name: Build and push the nginx image to Amazon ECR
         id: build-image-nginx

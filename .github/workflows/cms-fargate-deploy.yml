@@ -81,7 +81,7 @@ jobs:
         with:
           task-definition: ${{ inputs.ecs_task_definition }}
           container-name: drupal
-          image: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}:php-${{ inputs.php_tag }}
+          image: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}--php-${{ inputs.php_tag }}
 
       - name: Fill in the new drush image ID in the Amazon ECS task definition
         id: task-def-drush
@@ -89,7 +89,7 @@ jobs:
         with:
           task-definition: ${{ steps.task-def-drupal.outputs.task-definition }}
           container-name: drush
-          image: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}:php-${{ inputs.php_tag }}
+          image: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}--php-${{ inputs.php_tag }}
 
       - name: Fill in the new nginx image ID in the Amazon ECS task definition
         id: task-def-nginx
