@@ -91,7 +91,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           cd AwsTools/${{ inputs.environment }}/cms/build-images/php-nginx
-          ./bin/create_dockerfile_nginx.py -i $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}
+          ./bin/create_dockerfile_nginx.py -i $ECR_REGISTRY/com-ck-cms-base-images:${{ inputs.tag }}--php-${{ inputs.php_tag }}
           docker build \
             --build-arg app_branch=${{ inputs.tag }} \
             --build-arg author="GitHub" \
