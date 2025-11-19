@@ -1,0 +1,93 @@
+name: Deploy to Amazon CloudFormation
+
+on:
+  workflow_call:
+    inputs:
+      cloudformation_stack_name:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      php_tag:
+        required: false
+        type: string
+        default: "7.4"
+    secrets:
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      GH_ACCESS_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ECS Fargate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Clone AwsTools repository
+        uses: actions/checkout@v3
+        with:
+          repository: CounselKit/AwsTools
+          path: AwsTools
+          token: ${{ secrets.GH_ACCESS_TOKEN }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build CloudFormation parameters
+        id: build-params
+        env:
+          STACK_NAME: ${{ inputs.cloudformation_stack_name }}
+          NEW_PHP_IMAGE: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}--php-${{ inputs.php_tag }}
+          NEW_NGINX_IMAGE: ${{ steps.login-ecr.outputs.registry }}/com-ck-cms-base-images:${{ inputs.tag }}-nginx
+        run: |
+          # Get all current stack parameters
+          PARAM_KEYS=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].Parameters[*].ParameterKey' \
+            --output text)
+          
+          # Build parameters list, using previous values for all except image parameters
+          PARAMS=""
+          for key in $PARAM_KEYS; do
+            if [ "$key" = "PHPImage" ]; then
+              PARAMS="$PARAMS ParameterKey=$key,ParameterValue=$NEW_PHP_IMAGE"
+            elif [ "$key" = "NginxImage" ]; then
+              PARAMS="$PARAMS ParameterKey=$key,ParameterValue=$NEW_NGINX_IMAGE"
+            else
+              PARAMS="$PARAMS ParameterKey=$key,UsePreviousValue=true"
+            fi
+          done
+          
+          echo "params=$PARAMS" >> $GITHUB_OUTPUT
+
+      - name: Update CloudFormation Stack
+        run: |
+          aws cloudformation update-stack \
+            --stack-name ${{ inputs.cloudformation_stack_name }} \
+            --use-previous-template \
+            --parameters ${{ steps.build-params.outputs.params }} \
+            --capabilities CAPABILITY_IAM
+          
+          echo "Waiting for stack update to complete..."
+          aws cloudformation wait stack-update-complete \
+            --stack-name ${{ inputs.cloudformation_stack_name }}
+          
+          echo "Stack update completed successfully!"
